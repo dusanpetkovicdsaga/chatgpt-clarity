@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chrome Extension Test</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div style="padding: 20px;">
+        <h1>Test ChatGPT Extension Popover</h1>
+        <p>This is a test message</p>
+        <button id="test-button" class="extension-reply-button">Ask Extension</button>
+        
+        <script>
+            // Simple test for popover functionality
+            document.getElementById('test-button').addEventListener('click', function() {
+                // Create test popover
+                const existingPopover = document.querySelector('#extension-question-popover');
+                if (existingPopover) {
+                    existingPopover.hidePopover();
+                    existingPopover.remove();
+                }
+                
+                const popover = document.createElement('div');
+                popover.id = 'extension-question-popover';
+                popover.popover = 'auto';
+                popover.className = 'extension-question-popover';
+                
+                popover.innerHTML = `
+                    <div class="popover-content">
+                        <div class="popover-header">
+                            <span>💬 Ask about this message</span>
+                            <button class="popover-close" popovertarget="extension-question-popover">×</button>
+                        </div>
+                        <div class="popover-body">
+                            <textarea 
+                                class="question-input" 
+                                placeholder="What would you like to ask about this message?"
+                                rows="3"
+                            ></textarea>
+                            <div class="popover-actions">
+                                <button class="ask-button">Ask Extension</button>
+                                <button class="cancel-button" popovertarget="extension-question-popover">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(popover);
+                
+                // Position relative to button (viewport coordinates)
+                const buttonRect = this.getBoundingClientRect();
+                const popoverWidth = 350;
+                
+                let left = buttonRect.left;
+                let top = buttonRect.bottom + 10;
+                
+                // Adjust if goes off screen
+                if (left + popoverWidth > window.innerWidth) {
+                    left = window.innerWidth - popoverWidth - 20;
+                }
+                
+                if (left < 10) left = 10;
+                if (top < 10) top = 10;
+                
+                popover.style.cssText = `
+                    left: ${left}px;
+                    top: ${top}px;
+                `;
+                
+                popover.showPopover();
+                
+                // Focus textarea
+                setTimeout(() => {
+                    popover.querySelector('.question-input').focus();
+                }, 100);
+                
+                // Auto-cleanup
+                popover.addEventListener('toggle', (e) => {
+                    if (e.newState === 'closed') {
+                        setTimeout(() => {
+                            if (popover.parentNode) {
+                                popover.remove();
+                            }
+                        }, 100);
+                    }
+                });
+            });
+        </script>
+    </div>
+</body>
+</html>
