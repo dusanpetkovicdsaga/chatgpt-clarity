@@ -3,7 +3,7 @@
   "name": "ChatGPT Clarity",
   "short_name": "ChatGPT Clarity",
   "version": "1.0.0",
-  "description": "Pin important ChatGPT messages, ask follow-up questions with full context, and organize conversations in a beautiful sidebar. Features masonry grid layout, full-screen mode, and seamless integration with ChatGPT interface.",
+  "description": "Pin ChatGPT messages, ask follow-up questions, and organize conversations in a beautiful sidebar with grid layout.",
   "author": "Dusan Petkovic",
   "homepage_url": "https://github.com/dusanpetkovicdsaga/chatgpt-clarity",
   "privacy_policy": "https://github.com/dusanpetkovicdsaga/chatgpt-clarity/blob/main/PRIVACY.md",
