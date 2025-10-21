@@ -53,12 +53,22 @@ class ChatGPTExtension {
         // Create a subtle notification that the extension is now active
         const notice = document.createElement('div');
         notice.id = 'extension-activation-notice';
-        notice.innerHTML = `
-            <div class="activation-notice">
-                🤖 ChatGPT Clarity is now active!
-                <button onclick="this.parentElement.parentElement.remove()">×</button>
-            </div>
-        `;
+        
+        const noticeContent = document.createElement('div');
+        noticeContent.className = 'activation-notice';
+        
+        const message = document.createElement('span');
+        message.textContent = '🤖 ChatGPT Clarity is now active!';
+        
+        const closeButton = document.createElement('button');
+        closeButton.className = 'activation-notice-close';
+        closeButton.innerHTML = '×';
+        closeButton.setAttribute('aria-label', 'Close notification');
+        
+        noticeContent.appendChild(message);
+        noticeContent.appendChild(closeButton);
+        notice.appendChild(noticeContent);
+        
         notice.style.cssText = `
             position: fixed;
             top: 20px;
@@ -77,24 +87,34 @@ class ChatGPTExtension {
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
                 display: flex;
                 align-items: center;
+                justify-content: space-between;
                 gap: 12px;
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 font-size: 14px;
                 animation: slideInRight 0.3s ease;
+                min-width: 280px;
             }
-            .activation-notice button {
+            .activation-notice-close {
                 background: rgba(255,255,255,0.2);
                 border: none;
                 color: white;
-                width: 20px;
-                height: 20px;
+                width: 22px;
+                height: 22px;
                 border-radius: 50%;
                 cursor: pointer;
-                font-size: 16px;
+                font-size: 14px;
                 line-height: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                transition: background-color 0.2s ease;
             }
-            .activation-notice button:hover {
+            .activation-notice-close:hover {
                 background: rgba(255,255,255,0.3);
+            }
+            .activation-notice-close:active {
+                background: rgba(255,255,255,0.4);
             }
             @keyframes slideInRight {
                 from { transform: translateX(100%); opacity: 0; }
@@ -105,12 +125,23 @@ class ChatGPTExtension {
         document.head.appendChild(noticeStyle);
         document.body.appendChild(notice);
         
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
+        // Add click event listener to close button
+        const removeNotice = () => {
             if (notice.parentElement) {
                 notice.style.animation = 'slideInRight 0.3s ease reverse';
-                setTimeout(() => notice.remove(), 300);
+                setTimeout(() => {
+                    if (notice.parentElement) {
+                        notice.remove();
+                    }
+                }, 300);
             }
+        };
+        
+        closeButton.addEventListener('click', removeNotice);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            removeNotice();
         }, 5000);
     }
 
@@ -193,6 +224,13 @@ class ChatGPTExtension {
                             <button id="sidebar-close-pinned" class="sidebar-control-btn" title="Close">×</button>
                         </div>
                     </div>
+                    <div class="tags-filter-bar" id="tags-filter-bar">
+                        <div class="tags-search-container">
+                            <input type="text" class="tags-search-input" id="tags-search-input" placeholder="Search tags..." />
+                            <button class="tags-clear-filter" id="tags-clear-filter" title="Clear filter">×</button>
+                        </div>
+                        <div class="tags-list" id="tags-list"></div>
+                    </div>
                     <div class="pinned-messages-container" id="pinned-messages-container">
                         <div class="no-pins-message">
                             <div class="system-message">
@@ -206,21 +244,18 @@ class ChatGPTExtension {
                     </div>
                     <div class="pinned-detail-view" id="pinned-detail-view">
                         <div class="detail-view-header">
-                            <button class="back-to-grid-btn" id="back-to-grid-btn">
+                            <button class="back-to-grid-btn" id="back-to-grid-btn" title="Back to Grid">
                                 <svg viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/>
                                 </svg>
-                                Back to Grid
                             </button>
                             <div class="detail-conversation-info">
                                 <h3 id="detail-conversation-title">Conversation Title</h3>
                                 <p id="detail-conversation-timestamp">Timestamp</p>
                             </div>
                         </div>
-                        <div class="detail-view-content">
-                            <div class="detail-message-content" id="detail-message-content">
-                                <!-- Message content will be populated here -->
-                            </div>
+                        <div class="detail-view-content" id="detail-view-content">
+                            <!-- Content will be populated here -->
                         </div>
                     </div>
                 </div>
@@ -356,6 +391,14 @@ class ChatGPTExtension {
     closeSidebar() {
         const sidebar = document.getElementById('chatgpt-extension-sidebar');
         if (sidebar) {
+            // If sidebar is in expanded (full-screen) mode, first restore to normal mode
+            if (sidebar.classList.contains('expanded')) {
+                console.log('Sidebar is in full-screen mode, restoring to normal mode instead of closing');
+                this.toggleSidebarExpand(); // This will restore to normal mode
+                return; // Don't close the sidebar, just exit full-screen
+            }
+            
+            // Normal close behavior - remove sidebar completely
             sidebar.remove();
         }
         this.removeRestoreButton();
@@ -382,8 +425,7 @@ class ChatGPTExtension {
             
             if (newWidth >= minWidth && newWidth <= maxWidth) {
                 sidebar.style.width = newWidth + 'px';
-                // Update CSS custom property for body margin
-                document.documentElement.style.setProperty('--sidebar-width', newWidth + 'px');
+                // CSS custom property no longer needed since we removed body margin
             }
         }
 
@@ -1080,6 +1122,232 @@ class ChatGPTExtension {
         }
     }
 
+    createAskChatInterface(options = {}) {
+        const {
+            messageElement,
+            messageId,
+            container,
+            isInline = false,
+            title = '💬 Ask about this message',
+            placeholder = 'What would you like to ask about this message?',
+            onSubmit = null,
+            onCancel = null,
+            showCloseButton = true,
+            showCancelButton = true
+        } = options;
+
+        const interfaceId = `ask-interface-${messageId}-${Date.now()}`;
+        
+        const interfaceHTML = `
+            <div class="ask-chat-interface ${isInline ? 'inline' : 'popover'}" data-message-id="${messageId}" id="${interfaceId}">
+                <div class="ask-chat-content">
+                    ${!isInline ? `
+                        <div class="ask-chat-header">
+                            <span>${title}</span>
+                            ${showCloseButton ? '<button class="ask-chat-close">×</button>' : ''}
+                        </div>
+                    ` : ''}
+                    <div class="ask-chat-body">
+                        ${isInline ? `<div class="ask-chat-title">${title}</div>` : ''}
+                        <div class="ask-chat-context-preview" data-message-id="${messageId}">
+                            <div class="context-preview-header">
+                                <span>📋 Context Preview</span>
+                                <button class="context-toggle" data-message-id="${messageId}">Show Context</button>
+                            </div>
+                            <div class="context-preview-content" style="display: none;"></div>
+                        </div>
+                        <textarea 
+                            class="ask-chat-input" 
+                            placeholder="${placeholder}"
+                            rows="3"
+                            data-message-id="${messageId}"
+                        ></textarea>
+                        <div class="ask-chat-actions">
+                            <button class="ask-chat-submit" data-message-id="${messageId}">Ask Extension</button>
+                            ${showCancelButton ? '<button class="ask-chat-cancel">Cancel</button>' : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Create the interface element
+        const interfaceElement = document.createElement('div');
+        interfaceElement.innerHTML = interfaceHTML;
+        const askInterface = interfaceElement.firstElementChild;
+
+        // Add to container
+        container.appendChild(askInterface);
+
+        // Set up event handlers
+        this.setupAskChatHandlers(askInterface, {
+            messageElement,
+            messageId,
+            onSubmit,
+            onCancel,
+            isInline
+        });
+
+        return askInterface;
+    }
+
+    setupAskChatHandlers(askInterface, options) {
+        const {
+            messageElement,
+            messageId,
+            onSubmit,
+            onCancel,
+            isInline
+        } = options;
+
+        const textarea = askInterface.querySelector('.ask-chat-input');
+        const submitButton = askInterface.querySelector('.ask-chat-submit');
+        const cancelButton = askInterface.querySelector('.ask-chat-cancel');
+        const closeButton = askInterface.querySelector('.ask-chat-close');
+
+        // Function to remove interface
+        const removeInterface = () => {
+            if (askInterface.parentNode) {
+                askInterface.remove();
+            }
+        };
+
+        // Focus on textarea
+        setTimeout(() => {
+            if (textarea) {
+                textarea.focus();
+            }
+        }, 100);
+
+        // Handle submit button
+        if (submitButton) {
+            submitButton.addEventListener('click', async () => {
+                const question = textarea.value.trim();
+                console.log('Ask chat submit clicked, question:', question);
+                
+                if (!question) {
+                    alert('Please enter a question');
+                    return;
+                }
+
+                try {
+                    // Disable button during processing
+                    submitButton.disabled = true;
+                    submitButton.textContent = 'Processing...';
+
+                    if (onSubmit) {
+                        await onSubmit(question);
+                    } else {
+                        // Default behavior
+                        await this.processQuestion(messageElement, messageId, question, true);
+                    }
+
+                    // Clear textarea
+                    textarea.value = '';
+
+                    if (!isInline) {
+                        removeInterface();
+                    }
+
+                } catch (error) {
+                    console.error('Error in ask chat interface:', error);
+                    alert(`Error: ${error.message}`);
+                } finally {
+                    // Re-enable button
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Ask Extension';
+                }
+            });
+        }
+
+        // Handle cancel and close buttons
+        if (cancelButton) {
+            cancelButton.addEventListener('click', () => {
+                if (onCancel) {
+                    onCancel();
+                } else {
+                    removeInterface();
+                }
+            });
+        }
+
+        if (closeButton) {
+            closeButton.addEventListener('click', removeInterface);
+        }
+
+        // Handle Enter key for submission
+        if (textarea) {
+            textarea.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (submitButton) {
+                        submitButton.click();
+                    }
+                } else if (e.key === 'Escape' && !isInline) {
+                    removeInterface();
+                }
+            });
+        }
+
+        // Setup context preview
+        this.setupAskChatContextPreview(askInterface, messageId);
+
+        // Handle click outside for popover mode
+        if (!isInline) {
+            setTimeout(() => {
+                const handleClickOutside = (e) => {
+                    if (!askInterface.contains(e.target)) {
+                        removeInterface();
+                        document.removeEventListener('click', handleClickOutside);
+                    }
+                };
+                document.addEventListener('click', handleClickOutside);
+            }, 100);
+        }
+    }
+
+    setupAskChatContextPreview(askInterface, messageId) {
+        const contextToggleButton = askInterface.querySelector('.context-toggle');
+        const previewContent = askInterface.querySelector('.context-preview-content');
+
+        if (!contextToggleButton || !previewContent) return;
+
+        contextToggleButton.addEventListener('click', () => {
+            const isVisible = previewContent.style.display !== 'none';
+
+            if (isVisible) {
+                previewContent.style.display = 'none';
+                contextToggleButton.textContent = 'Show Context';
+            } else {
+                // Load and display context preview
+                const contextPreview = this.getContextPreview(messageId);
+
+                if (contextPreview.hasContext) {
+                    previewContent.innerHTML = `
+                        <div class="context-info">
+                            <strong>Total messages in context: ${contextPreview.totalMessages}</strong>
+                            ${contextPreview.isPartial ? `<em>(showing last ${contextPreview.preview.length})</em>` : ''}
+                        </div>
+                        <div class="context-messages">
+                            ${contextPreview.preview.map((msg, index) => `
+                                <div class="context-message">
+                                    <div class="context-message-role">${msg.role === 'user' ? '👤' : '🤖'} ${msg.role}</div>
+                                    <div class="context-message-content">${msg.content}</div>
+                                    ${msg.fullLength > 100 ? `<div class="context-message-info">${msg.fullLength} characters total</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    previewContent.innerHTML = '<div class="no-context">No saved context available. Context will be generated when you ask a question.</div>';
+                }
+
+                previewContent.style.display = 'block';
+                contextToggleButton.textContent = 'Hide Context';
+            }
+        });
+    }
+
     showQuestionPopover(messageElement, messageId, button) {
         console.log('showQuestionPopover called for message:', messageId);
         
@@ -1087,108 +1355,37 @@ class ChatGPTExtension {
             // Close any existing popover
             this.closeExistingPopover();
             
-            // Create popover element
-            const popover = document.createElement('div');
-            popover.className = 'extension-question-popover';
-            popover.setAttribute('data-message-id', messageId);
-            
-            popover.innerHTML = `
-                <div class="popover-content">
-                    <div class="popover-header">
-                        <span>💬 Ask about this message</span>
-                        <button class="popover-close">×</button>
-                    </div>
-                    <div class="popover-body">
-                        <textarea 
-                            class="question-input" 
-                            placeholder="What would you like to ask about this message?"
-                            rows="3"
-                        ></textarea>
-                        <div class="popover-actions">
-                            <button class="ask-button">Ask Extension</button>
-                            <button class="cancel-button">Cancel</button>
-                        </div>
-                    </div>
-                </div>
+            // Create container for the popover
+            const popoverContainer = document.createElement('div');
+            popoverContainer.className = 'extension-question-popover';
+            popoverContainer.style.cssText = `
+                position: absolute;
+                z-index: 10002;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                margin: 8px 0;
+                top: 100%;
+                padding: 0;
             `;
             
-            // Insert popover inside the button container element
+            // Insert popover container
             const buttonContainer = button.parentElement;
-            buttonContainer.appendChild(popover);
+            buttonContainer.appendChild(popoverContainer);
             
-            // Event listeners
-            const textarea = popover.querySelector('.question-input');
-            const askButton = popover.querySelector('.ask-button');
-            const cancelButton = popover.querySelector('.cancel-button');
-            const closeButton = popover.querySelector('.popover-close');
-            
-            if (!textarea || !askButton || !cancelButton || !closeButton) {
-                console.error('Popover elements not found:', { textarea, askButton, cancelButton, closeButton });
-                return;
-            }
-            
-            // Function to remove popover
-            const removePopover = () => {
-                if (popover.parentNode) {
-                    popover.remove();
-                }
-            };
-            
-            // Focus on textarea
-            setTimeout(() => {
-                textarea.focus();
-                console.log('Textarea focused');
-            }, 100);
-            
-            // Handle ask button (submit question)
-            askButton.addEventListener('click', async () => {
-                const question = textarea.value.trim();
-                console.log('Ask button clicked, question:', question);
-                if (!question) return;
-                
-                try {
+            // Create the reusable ask chat interface in popover mode
+            this.createAskChatInterface({
+                messageElement,
+                messageId,
+                container: popoverContainer,
+                isInline: false,
+                title: '💬 Ask about this message',
+                placeholder: 'What would you like to ask about this message?',
+                onSubmit: async (question) => {
                     await this.processQuestion(messageElement, messageId, question, false);
-                    removePopover(); // Remove after successful submission
-                } catch (error) {
-                    this.showPopoverError(popover, error.message);
+                },
+                onCancel: () => {
+                    popoverContainer.remove();
                 }
             });
-            
-            // Handle cancel and close buttons
-            cancelButton.addEventListener('click', removePopover);
-            closeButton.addEventListener('click', removePopover);
-            
-            // Handle Enter key for submission
-            textarea.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    askButton.click();
-                } else if (e.key === 'Escape') {
-                    removePopover();
-                }
-            });
-            
-            // Handle focus out - remove popover when clicking outside
-            setTimeout(() => {
-                const handleClickOutside = (e) => {
-                    if (!popover.contains(e.target) && !button.contains(e.target)) {
-                        removePopover();
-                        document.removeEventListener('click', handleClickOutside);
-                    }
-                };
-                document.addEventListener('click', handleClickOutside);
-                
-                // Also handle focus out from form elements
-                popover.addEventListener('focusout', (e) => {
-                    // Check if the new focus target is still within the popover
-                    setTimeout(() => {
-                        const activeElement = document.activeElement;
-                        if (!popover.contains(activeElement) && activeElement !== button) {
-                            removePopover();
-                        }
-                    }, 100);
-                });
-            }, 100);
             
         } catch (error) {
             console.error('Error creating question popover:', error);
@@ -1333,11 +1530,14 @@ class ChatGPTExtension {
         }
     }
 
-    loadPinnedMessages() {
-        const pinnedMessages = this.getPinnedMessages();
+    loadPinnedMessages(filteredMessages = null) {
+        let pinnedMessages = filteredMessages || this.getPinnedMessages();
         const container = document.getElementById('pinned-messages-container');
         const sidebar = document.getElementById('chatgpt-extension-sidebar');
         const isExpanded = sidebar.classList.contains('expanded');
+        
+        // Load tags filter bar
+        this.loadTagsFilter();
         
         if (pinnedMessages.length === 0) {
             container.innerHTML = `
@@ -1345,8 +1545,8 @@ class ChatGPTExtension {
                     <div class="system-message">
                         <div class="message-avatar">📌</div>
                         <div class="message-content">
-                            <p>No pinned messages yet!</p>
-                            <p>Click the pin button (📌) on any ChatGPT message to save it here for easy reference.</p>
+                            <p>${filteredMessages ? 'No messages match your filter!' : 'No pinned messages yet!'}</p>
+                            <p>${filteredMessages ? 'Try adjusting your tag filter or search term.' : 'Click the pin button (📌) on any ChatGPT message to save it here for easy reference.'}</p>
                         </div>
                     </div>
                 </div>
@@ -1388,45 +1588,100 @@ class ChatGPTExtension {
         // Add click listeners to condensed cards
         container.querySelectorAll('.pinned-message-condensed').forEach(card => {
             card.addEventListener('click', (e) => {
+                console.log('Card clicked:', e.target, 'Closest actions:', e.target.closest('.condensed-actions'));
                 if (!e.target.closest('.condensed-actions')) {
                     const messageId = card.dataset.messageId;
+                    console.log('Opening detailed view for message:', messageId);
                     this.showDetailedView(messageId);
+                } else {
+                    console.log('Click was on actions, not opening detail view');
                 }
+            });
+        });
+
+        // Add click listeners to tags for filtering
+        container.querySelectorAll('.message-tag').forEach(tagEl => {
+            tagEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tag = tagEl.dataset.tag;
+                this.filterByTag(tag);
+            });
+        });
+
+        // Add click listeners to tag buttons
+        const tagButtons = container.querySelectorAll('.tag-btn');
+        console.log('Found masonry tag buttons:', tagButtons.length);
+        tagButtons.forEach(tagBtn => {
+            tagBtn.addEventListener('click', (e) => {
+                console.log('Masonry tag button clicked!');
+                e.stopPropagation();
+                const messageId = tagBtn.dataset.messageId;
+                console.log('Message ID:', messageId);
+                this.showTagInput(messageId, e);
             });
         });
     }
 
     loadRegularList(pinnedMessages, container) {
-        const messagesHTML = pinnedMessages.map(msg => `
-            <div class="pinned-message" data-message-id="${msg.id}">
-                <div class="pinned-message-header">
-                    <div class="conversation-info">
-                        <span class="conversation-title-pin">${msg.conversationTitle}</span>
-                        <span class="message-timestamp">${this.formatTimestamp(msg.timestamp)}</span>
-                    </div>
-                    <div class="pinned-message-actions">
-                        <button class="goto-conversation-btn" onclick="window.open('${msg.conversationUrl}', '_blank')" title="Go to conversation">
-                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M19,7V11H5.83L9.41,7.41L8,6L2,12L8,18L9.41,16.59L5.83,13H21V7H19Z"/>
-                            </svg>
-                        </button>
-                        <button class="unpin-btn" onclick="chatGPTExtension.unpinMessageFromView('${msg.id}')" title="Unpin message">
-                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M2,5.27L3.28,4L20,20.72L18.73,22L12.8,16.07V22H11.2V16H8V14H11.2V12.8L2,5.27M16,4V8H15V14H14.24L8.52,8.28L8.5,8.31L7.31,7.12L8,4H16M14,2H10V4H8V8H7V10H10V14.27L8.73,13H7V8H6V4H4V2H14Z"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="pinned-message-content">
-                    ${msg.content.html}
-                </div>
-            </div>
-        `).join('');
+        // Create a 2-column grid for sidebar view
+        const columns = [[], []];
+        
+        // Distribute messages across 2 columns
+        pinnedMessages.forEach((msg, index) => {
+            columns[index % 2].push(msg);
+        });
 
-        container.innerHTML = messagesHTML;
+        const gridHTML = `
+            <div class="pinned-messages-sidebar-grid">
+                ${columns.map(columnMessages => `
+                    <div class="sidebar-masonry-column">
+                        ${columnMessages.map(msg => this.createSidebarCondensedCard(msg)).join('')}
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        container.innerHTML = gridHTML;
+
+        // Add click listeners to condensed cards
+        container.querySelectorAll('.pinned-message-sidebar-condensed').forEach(card => {
+            card.addEventListener('click', (e) => {
+                console.log('Sidebar card clicked:', e.target, 'Closest actions:', e.target.closest('.condensed-actions'));
+                if (!e.target.closest('.condensed-actions')) {
+                    const messageId = card.dataset.messageId;
+                    console.log('Opening detailed view for message:', messageId);
+                    this.showDetailedView(messageId);
+                } else {
+                    console.log('Click was on actions, not opening detail view');
+                }
+            });
+        });
+
+        // Add click listeners to tags for filtering
+        container.querySelectorAll('.message-tag').forEach(tagEl => {
+            tagEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tag = tagEl.dataset.tag;
+                this.filterByTag(tag);
+            });
+        });
+
+        // Add click listeners to tag buttons
+        const tagButtons = container.querySelectorAll('.tag-btn');
+        console.log('Found sidebar tag buttons:', tagButtons.length);
+        tagButtons.forEach(tagBtn => {
+            tagBtn.addEventListener('click', (e) => {
+                console.log('Sidebar tag button clicked!');
+                e.stopPropagation();
+                const messageId = tagBtn.dataset.messageId;
+                console.log('Message ID:', messageId);
+                this.showTagInput(messageId, e);
+            });
+        });
     }
 
     createCondensedCard(msg) {
+        const tags = this.getPinnedMessageTags(msg.id);
         return `
             <div class="pinned-message-condensed" data-message-id="${msg.id}">
                 <div class="condensed-header">
@@ -1435,14 +1690,19 @@ class ChatGPTExtension {
                         <div class="condensed-timestamp">${this.formatTimestamp(msg.timestamp)}</div>
                     </div>
                     <div class="condensed-actions">
+                        <button class="tag-btn" data-message-id="${msg.id}" title="Add tags">
+                            <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M17.707 9.293l-5-5A.997.997 0 0 0 12 4H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h10c.266 0 .52-.105.707-.293l5-5a.999.999 0 0 0 0-1.414zM6 10a2 2 0 1 1 .001-4.001A2 2 0 0 1 6 10z"/>
+                            </svg>
+                        </button>
                         <button class="goto-conversation-btn" onclick="event.stopPropagation(); window.open('${msg.conversationUrl}', '_blank')" title="Go to conversation">
                             <svg viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19,7V11H5.83L9.41,7.41L8,6L2,12L8,18L9.41,16.59L5.83,13H21V7H19Z"/>
                             </svg>
                         </button>
-                        <button class="unpin-btn" onclick="event.stopPropagation(); chatGPTExtension.unpinMessageFromView('${msg.id}')" title="Unpin message">
-                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M2,5.27L3.28,4L20,20.72L18.73,22L12.8,16.07V22H11.2V16H8V14H11.2V12.8L2,5.27M16,4V8H15V14H14.24L8.52,8.28L8.5,8.31L7.31,7.12L8,4H16M14,2H10V4H8V8H7V10H10V14.27L8.73,13H7V8H6V4H4V2H14Z"/>
+                        <button class="unpin-btn" onclick="event.stopPropagation(); chatGPTExtension.unpinMessageFromGrid('${msg.id}', event)" title="Unpin message">
+                            <svg viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
                             </svg>
                         </button>
                     </div>
@@ -1450,6 +1710,50 @@ class ChatGPTExtension {
                 <div class="condensed-content">
                     ${this.stripHtml(msg.content.text)}
                 </div>
+                ${tags.length > 0 ? `
+                    <div class="message-tags">
+                        ${tags.map(tag => `<span class="message-tag" data-tag="${tag}">${tag}</span>`).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    createSidebarCondensedCard(msg) {
+        const tags = this.getPinnedMessageTags(msg.id);
+        return `
+            <div class="pinned-message-sidebar-condensed" data-message-id="${msg.id}">
+                <div class="sidebar-condensed-header">
+                    <div class="sidebar-condensed-conversation-info">
+                        <div class="sidebar-condensed-conversation-title">${msg.conversationTitle}</div>
+                        <div class="sidebar-condensed-timestamp">${this.formatTimestamp(msg.timestamp)}</div>
+                    </div>
+                    <div class="condensed-actions">
+                        <button class="tag-btn" data-message-id="${msg.id}" title="Add tags">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M14 2H8.414L7 .586A2 2 0 0 0 5.586 0H2A2 2 0 0 0 0 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+                            </svg>
+                        </button>
+                        <button class="goto-conversation-btn" onclick="event.stopPropagation(); window.open('${msg.conversationUrl}', '_blank')" title="Go to conversation">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M12,7V9H6.41L8.7,11.29L7.29,12.7L3.59,9L7.29,5.29L8.7,6.7L6.41,9H14V7H12Z"/>
+                            </svg>
+                        </button>
+                        <button class="unpin-btn" onclick="event.stopPropagation(); chatGPTExtension.unpinMessageFromGrid('${msg.id}', event)" title="Unpin message">
+                            <svg viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-condensed-content">
+                    ${this.stripHtml(msg.content.text)}
+                </div>
+                ${tags.length > 0 ? `
+                    <div class="message-tags">
+                        ${tags.map(tag => `<span class="message-tag" data-tag="${tag}">${tag}</span>`).join('')}
+                    </div>
+                ` : ''}
             </div>
         `;
     }
@@ -1474,25 +1778,246 @@ class ChatGPTExtension {
     }
 
     showDetailedView(messageId) {
+        console.log('showDetailedView called with messageId:', messageId);
         const pinnedMessages = this.getPinnedMessages();
         const message = pinnedMessages.find(msg => msg.id === messageId);
         
-        if (!message) return;
+        if (!message) {
+            console.log('Message not found for messageId:', messageId);
+            return;
+        }
+        
+        console.log('Found message:', message);
 
-        // Update detailed view content
-        document.getElementById('detail-conversation-title').textContent = message.conversationTitle;
-        document.getElementById('detail-conversation-timestamp').textContent = `Pinned ${this.formatTimestamp(message.timestamp)}`;
-        document.getElementById('detail-message-content').innerHTML = message.content.html;
+        const sidebar = document.getElementById('chatgpt-extension-sidebar');
+        const isExpanded = sidebar.classList.contains('expanded');
+        const detailView = document.getElementById('pinned-detail-view');
+        const gridView = document.getElementById('pinned-messages-container');
+        
+        // Hide grid and show detail view
+        if (gridView) gridView.style.display = 'none';
+        if (detailView) {
+            detailView.style.display = 'flex';
+            detailView.classList.add('active');
+            // Store the message ID for later reference
+            detailView.dataset.messageId = messageId;
+        }
+        
+        // Load replies and questions for this message
+        const replies = this.loadPinnedMessageReplies(messageId);
+        const questions = this.loadPinnedMessageQuestions(messageId);
+        
+        // Update detail view content
+        const detailContent = document.getElementById('detail-view-content');
+        console.log('Detail content element:', detailContent);
+        console.log('Is expanded:', isExpanded);
+        console.log('Replies:', replies);
+        console.log('Questions:', questions);
+        
+        if (detailContent) {
+            if (isExpanded) {
+                // Full-screen: simple message display
+                detailContent.innerHTML = `
+                    <div class="detail-message-section">
+                        <div class="detail-section-header">
+                            <span>📌 Pinned Message</span>
+                        </div>
+                        <div class="detail-section-content">
+                            <div class="detail-message-content">
+                                ${message.content?.html || message.content?.text || 'Content not available'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Normal mode: simple message display
+                detailContent.innerHTML = `
+                    <div class="detail-message-content">
+                        ${message.content?.html || message.content?.text || 'Content not available'}
+                    </div>
+                `;
+            }
+        }
+        
+        // Update header info
+        const detailHeader = document.querySelector('.detail-conversation-info');
+        if (detailHeader) {
+            detailHeader.innerHTML = `
+                <h3>${message.conversationTitle || 'Untitled Conversation'}</h3>
+                <p>Pinned ${this.formatTimestamp(message.timestamp)}</p>
+            `;
+        }
+        
+        // No need for event listeners since we only show the message
+    }
 
-        // Hide grid view and show detailed view
-        document.getElementById('pinned-messages-container').style.display = 'none';
-        document.getElementById('pinned-detail-view').classList.add('active');
+    setupDetailQuestionHandlers(messageId, message) {
+        console.log('Setting up detail question handlers for message:', messageId);
+        
+        // Use a short delay to ensure DOM is ready
+        setTimeout(() => {
+            // Find question submit buttons specifically for this message in the detailed view
+            const detailView = document.getElementById('pinned-detail-view');
+            if (!detailView) {
+                console.error('Detail view not found');
+                return;
+            }
+            
+            const questionButtons = detailView.querySelectorAll(`.detail-question-submit[data-message-id="${messageId}"]`);
+            console.log('Found question buttons:', questionButtons.length);
+            
+            questionButtons.forEach((button, index) => {
+                console.log(`Setting up handler for button ${index}`);
+                
+                // Remove any existing listeners to avoid duplicates
+                const newButton = button.cloneNode(true);
+                button.parentNode.replaceChild(newButton, button);
+                
+                newButton.addEventListener('click', async (e) => {
+                    console.log('Ask Question button clicked');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const questionInput = detailView.querySelector(`.detail-question-input[data-message-id="${messageId}"]`);
+                    if (!questionInput) {
+                        console.error('Question input not found for messageId:', messageId);
+                        return;
+                    }
+                    
+                    const question = questionInput.value.trim();
+                    console.log('Question text:', question);
+                    
+                    if (!question) {
+                        alert('Please enter a question');
+                        return;
+                    }
+                    
+                    try {
+                        // Disable button during processing
+                        newButton.disabled = true;
+                        newButton.textContent = 'Processing...';
+                        
+                        // Create a temporary message element from the stored message data
+                        const tempMessageElement = document.createElement('div');
+                        tempMessageElement.textContent = message.content?.text || message.content?.html || '';
+                        
+                        console.log('Processing question...');
+                        // Process the question using the same logic as popover questions
+                        await this.processQuestion(tempMessageElement, messageId, question, true);
+                        
+                        // Clear the input
+                        questionInput.value = '';
+                        
+                        // Refresh the detailed view to show the new reply
+                        setTimeout(() => {
+                            this.showDetailedView(messageId);
+                        }, 1000);
+                        
+                    } catch (error) {
+                        console.error('Error processing question from detailed view:', error);
+                        alert(`Error: ${error.message}`);
+                        
+                        // Re-enable button on error
+                        newButton.disabled = false;
+                        newButton.textContent = 'Ask Question';
+                    }
+                });
+            });
+        }, 100);
+        
+        // Setup context toggle handlers with delay as well
+        setTimeout(() => {
+            this.setupContextToggleHandlers(messageId);
+        }, 100);
+        
+        // Setup Enter key handlers for question inputs
+        setTimeout(() => {
+            this.setupQuestionInputHandlers(messageId);
+        }, 100);
+    }
+    
+    setupContextToggleHandlers(messageId) {
+        const detailView = document.getElementById('pinned-detail-view');
+        if (!detailView) return;
+        
+        const contextToggleButtons = detailView.querySelectorAll('.context-toggle');
+        contextToggleButtons.forEach(button => {
+            const newButton = button.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
+            
+            newButton.addEventListener('click', () => {
+                const previewContent = detailView.querySelector('.context-preview-content');
+                const isVisible = previewContent.style.display !== 'none';
+                
+                if (isVisible) {
+                    previewContent.style.display = 'none';
+                    newButton.textContent = 'Show Context';
+                } else {
+                    // Load and display context preview
+                    const contextPreview = this.getContextPreview(messageId);
+                    
+                    if (contextPreview.hasContext) {
+                        previewContent.innerHTML = `
+                            <div class="context-info">
+                                <strong>Total messages in context: ${contextPreview.totalMessages}</strong>
+                                ${contextPreview.isPartial ? `<em>(showing last ${contextPreview.preview.length})</em>` : ''}
+                            </div>
+                            <div class="context-messages">
+                                ${contextPreview.preview.map((msg, index) => `
+                                    <div class="context-message">
+                                        <div class="context-message-role">${msg.role === 'user' ? '👤' : '🤖'} ${msg.role}</div>
+                                        <div class="context-message-content">${msg.content}</div>
+                                        ${msg.fullLength > 100 ? `<div class="context-message-info">${msg.fullLength} characters total</div>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    } else {
+                        previewContent.innerHTML = '<div class="no-context">No saved context available. Context will be generated when you ask a question.</div>';
+                    }
+                    
+                    previewContent.style.display = 'block';
+                    newButton.textContent = 'Hide Context';
+                }
+            });
+        });
+    }
+    
+    setupQuestionInputHandlers(messageId) {
+        const detailView = document.getElementById('pinned-detail-view');
+        if (!detailView) return;
+        
+        const questionInputs = detailView.querySelectorAll('.detail-question-input');
+        questionInputs.forEach(input => {
+            const newInput = input.cloneNode(true);
+            input.parentNode.replaceChild(newInput, input);
+            
+            newInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const button = detailView.querySelector(`.detail-question-submit[data-message-id="${messageId}"]`);
+                    if (button) {
+                        button.click();
+                    }
+                }
+            });
+        });
     }
 
     backToGrid() {
         // Show grid view and hide detailed view
-        document.getElementById('pinned-messages-container').style.display = 'flex';
-        document.getElementById('pinned-detail-view').classList.remove('active');
+        const gridView = document.getElementById('pinned-messages-container');
+        const detailView = document.getElementById('pinned-detail-view');
+        
+        if (gridView) {
+            gridView.style.display = 'flex';
+        }
+        if (detailView) {
+            detailView.style.display = 'none';
+            detailView.classList.remove('active');
+        }
+        
+        console.log('Back to grid clicked - hiding detail view');
     }
 
     unpinMessageFromView(messageId) {
@@ -1520,6 +2045,439 @@ class ChatGPTExtension {
         }
     }
 
+    unpinMessageFromGrid(messageId, event) {
+        // Prevent card click when clicking unpin button
+        if (event) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
+        
+        // Remove from storage
+        const pins = this.getPinnedMessages();
+        const updatedPins = pins.filter(pin => pin.id !== messageId);
+        localStorage.setItem('chatgpt_pinned_messages', JSON.stringify(updatedPins));
+        
+        // Update pin button state in main chat
+        document.querySelectorAll(`.extension-pin-button[data-message-id="${messageId}"]`).forEach(btn => {
+            btn.classList.remove('pinned');
+            btn.title = 'Pin this message';
+        });
+        
+        // Reload pinned messages to reflect changes
+        this.loadPinnedMessages();
+        
+        // Show success notification
+        this.showNotification('Message unpinned successfully', 'success');
+    }
+
+    loadPinnedMessageReplies(messageId) {
+        const conversationKey = `chatgpt_conversation_${messageId}`;
+        const conversation = JSON.parse(localStorage.getItem(conversationKey) || '[]');
+        
+        // Filter out the original question to show only replies
+        const replies = conversation.slice(1); // Skip the first item which is the original question
+        
+        return replies.map(item => ({
+            question: item.question || '',
+            response: item.response || '',
+            timestamp: item.timestamp || Date.now()
+        }));
+    }
+
+    loadPinnedMessageQuestions(messageId) {
+        const conversationKey = `chatgpt_conversation_${messageId}`;
+        const conversation = JSON.parse(localStorage.getItem(conversationKey) || '[]');
+        
+        // Extract just the questions (including the original if it exists)
+        return conversation.map(item => ({
+            question: item.question || '',
+            timestamp: item.timestamp || Date.now()
+        })).filter(item => item.question.trim() !== '');
+    }
+
+    // Tag Management Functions
+    getPinnedMessageTags(messageId) {
+        const tagsKey = `chatgpt_message_tags_${messageId}`;
+        return JSON.parse(localStorage.getItem(tagsKey) || '[]');
+    }
+
+    setPinnedMessageTags(messageId, tags) {
+        const tagsKey = `chatgpt_message_tags_${messageId}`;
+        const cleanTags = tags.map(tag => tag.trim().toLowerCase()).filter(tag => tag.length > 0);
+        localStorage.setItem(tagsKey, JSON.stringify(cleanTags));
+        this.loadTagsFilter(); // Refresh the tags filter
+        this.loadPinnedMessages(); // Refresh the messages display
+    }
+
+    getAllTags() {
+        const pinnedMessages = this.getPinnedMessages();
+        const allTags = new Set();
+        
+        pinnedMessages.forEach(msg => {
+            const tags = this.getPinnedMessageTags(msg.id);
+            tags.forEach(tag => allTags.add(tag));
+        });
+        
+        return Array.from(allTags).sort();
+    }
+
+    addTagToMessage(messageId, tag) {
+        const currentTags = this.getPinnedMessageTags(messageId);
+        const cleanTag = tag.trim().toLowerCase();
+        if (cleanTag && !currentTags.includes(cleanTag)) {
+            currentTags.push(cleanTag);
+            this.setPinnedMessageTags(messageId, currentTags);
+        }
+    }
+
+    removeTagFromMessage(messageId, tag) {
+        const currentTags = this.getPinnedMessageTags(messageId);
+        const cleanTag = tag.trim().toLowerCase();
+        const updatedTags = currentTags.filter(t => t !== cleanTag);
+        this.setPinnedMessageTags(messageId, updatedTags);
+    }
+
+    filterMessagesByTag(tag) {
+        if (!tag) return this.getPinnedMessages();
+        
+        const pinnedMessages = this.getPinnedMessages();
+        return pinnedMessages.filter(msg => {
+            const messageTags = this.getPinnedMessageTags(msg.id);
+            return messageTags.includes(tag.toLowerCase());
+        });
+    }
+
+    searchMessagesByTag(searchTerm) {
+        if (!searchTerm) return this.getPinnedMessages();
+        
+        const pinnedMessages = this.getPinnedMessages();
+        const searchLower = searchTerm.toLowerCase();
+        
+        return pinnedMessages.filter(msg => {
+            const messageTags = this.getPinnedMessageTags(msg.id);
+            return messageTags.some(tag => tag.includes(searchLower));
+        });
+    }
+
+    loadTagsFilter() {
+        const tagsFilterBar = document.getElementById('tags-filter-bar');
+        const tagsList = document.getElementById('tags-list');
+        const tagsSearchInput = document.getElementById('tags-search-input');
+        const tagsClearFilter = document.getElementById('tags-clear-filter');
+        
+        if (!tagsFilterBar || !tagsList) return;
+        
+        const allTags = this.getAllTags();
+        
+        // Show/hide filter bar based on whether there are tags or messages
+        const pinnedMessages = this.getPinnedMessages();
+        if (allTags.length === 0 || pinnedMessages.length === 0) {
+            tagsFilterBar.style.display = 'none';
+            return;
+        }
+        
+        tagsFilterBar.style.display = 'block';
+        
+        // Populate tags list
+        tagsList.innerHTML = `
+            <button class="tag-filter-btn active" data-tag="">All</button>
+            ${allTags.map(tag => `
+                <button class="tag-filter-btn" data-tag="${tag}">${tag}</button>
+            `).join('')}
+        `;
+        
+        // Add event listeners for tag filter buttons
+        tagsList.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tag-filter-btn')) {
+                // Update active state
+                tagsList.querySelectorAll('.tag-filter-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                // Filter messages
+                const selectedTag = e.target.dataset.tag;
+                const filteredMessages = selectedTag ? this.filterMessagesByTag(selectedTag) : null;
+                this.loadPinnedMessages(filteredMessages);
+            }
+        });
+        
+        // Add search functionality
+        if (tagsSearchInput && !tagsSearchInput.hasAttribute('data-listener')) {
+            tagsSearchInput.setAttribute('data-listener', 'true');
+            tagsSearchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.trim();
+                const filteredMessages = searchTerm ? this.searchMessagesByTag(searchTerm) : null;
+                this.loadPinnedMessages(filteredMessages);
+                
+                // Update clear button visibility
+                if (tagsClearFilter) {
+                    tagsClearFilter.style.display = searchTerm ? 'block' : 'none';
+                }
+            });
+        }
+        
+        // Add clear filter functionality
+        if (tagsClearFilter && !tagsClearFilter.hasAttribute('data-listener')) {
+            tagsClearFilter.setAttribute('data-listener', 'true');
+            tagsClearFilter.addEventListener('click', () => {
+                tagsSearchInput.value = '';
+                tagsClearFilter.style.display = 'none';
+                
+                // Reset to show all messages
+                tagsList.querySelectorAll('.tag-filter-btn').forEach(btn => btn.classList.remove('active'));
+                tagsList.querySelector('[data-tag=""]').classList.add('active');
+                this.loadPinnedMessages();
+            });
+        }
+    }
+
+    showTagInput(messageId, event) {
+        console.log('showTagInput called with messageId:', messageId, 'event:', event);
+        
+        const existingInput = document.querySelector('.tag-input-overlay');
+        if (existingInput) {
+            existingInput.remove();
+        }
+        
+        const currentTags = this.getPinnedMessageTags(messageId);
+        const rect = event.target.getBoundingClientRect();
+        
+        const overlay = document.createElement('div');
+        overlay.className = 'tag-input-overlay';
+        overlay.innerHTML = `
+            <div class="tag-input-container">
+                <div class="tag-input-header">
+                    <span>Tags for message</span>
+                    <button class="tag-input-close">×</button>
+                </div>
+                <div class="current-tags">
+                    ${currentTags.map(tag => `
+                        <span class="current-tag">
+                            ${tag}
+                            <button class="remove-tag-btn" data-tag="${tag}">×</button>
+                        </span>
+                    `).join('')}
+                </div>
+                <div class="tag-input-form">
+                    <input type="text" class="tag-input-field" placeholder="Add tag..." maxlength="20" />
+                    <button class="add-tag-btn">Add</button>
+                </div>
+            </div>
+        `;
+        
+        // Position overlay
+        overlay.style.position = 'fixed';
+        overlay.style.top = rect.bottom + 5 + 'px';
+        overlay.style.left = Math.min(rect.left, window.innerWidth - 250) + 'px';
+        overlay.style.zIndex = '10001';
+        
+        document.body.appendChild(overlay);
+        
+        // Focus input
+        const input = overlay.querySelector('.tag-input-field');
+        input.focus();
+        
+        // Add event listeners
+        const closeBtn = overlay.querySelector('.tag-input-close');
+        const addBtn = overlay.querySelector('.add-tag-btn');
+        
+        const closeInput = () => overlay.remove();
+        
+        closeBtn.addEventListener('click', closeInput);
+        
+        // Click outside to close
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeInput();
+        });
+        
+        // Add tag functionality
+        const addTag = () => {
+            const tagValue = input.value.trim();
+            if (tagValue && tagValue.length <= 20) {
+                this.addTagToMessage(messageId, tagValue);
+                closeInput();
+            }
+        };
+        
+        addBtn.addEventListener('click', addTag);
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTag();
+            }
+        });
+        
+        // Remove tag functionality
+        overlay.addEventListener('click', (e) => {
+            if (e.target.classList.contains('remove-tag-btn')) {
+                const tagToRemove = e.target.dataset.tag;
+                this.removeTagFromMessage(messageId, tagToRemove);
+                closeInput();
+            }
+        });
+    }
+
+    filterByTag(tag) {
+        // Update the active tag in filter bar
+        const tagsList = document.getElementById('tags-list');
+        if (tagsList) {
+            tagsList.querySelectorAll('.tag-filter-btn').forEach(btn => btn.classList.remove('active'));
+            const targetBtn = tagsList.querySelector(`[data-tag="${tag}"]`);
+            if (targetBtn) {
+                targetBtn.classList.add('active');
+            }
+        }
+        
+        // Clear search input
+        const searchInput = document.getElementById('tags-search-input');
+        if (searchInput) {
+            searchInput.value = '';
+            const clearBtn = document.getElementById('tags-clear-filter');
+            if (clearBtn) clearBtn.style.display = 'none';
+        }
+        
+        // Filter and reload messages
+        const filteredMessages = this.filterMessagesByTag(tag);
+        this.loadPinnedMessages(filteredMessages);
+    }
+
+    switchDetailTab(tabName) {
+        // Remove active class from all tabs
+        document.querySelectorAll('.detail-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.detail-tab-content').forEach(content => content.classList.remove('active'));
+        
+        // Add active class to selected tab
+        document.querySelector(`.detail-tab[onclick*="${tabName}"]`).classList.add('active');
+        const tabContent = document.getElementById(`detail-${tabName}-tab`);
+        tabContent.classList.add('active');
+        
+        // Special handling for replies tab - load ask chat interface
+        if (tabName === 'replies') {
+            this.loadRepliesTabWithAskInterface(tabContent);
+        }
+    }
+
+    loadRepliesTabWithAskInterface(tabContent) {
+        // Get the message ID from the current detailed view
+        const detailView = document.getElementById('pinned-detail-view');
+        if (!detailView) return;
+        
+        // Try to extract message ID from existing elements
+        const messageId = this.getCurrentDetailViewMessageId();
+        if (!messageId) {
+            console.error('Could not determine message ID for replies tab');
+            return;
+        }
+        
+        // Get the pinned message data
+        const pinnedMessages = this.getPinnedMessages();
+        const message = pinnedMessages.find(msg => msg.id === messageId);
+        
+        if (!message) {
+            console.error('Could not find message data for ID:', messageId);
+            return;
+        }
+        
+        // Create a temporary message element for the ask interface
+        const tempMessageElement = document.createElement('div');
+        tempMessageElement.textContent = message.content?.text || message.content?.html || '';
+        
+        // Clear existing content and add the ask chat interface
+        tabContent.innerHTML = '';
+        
+        // Create container for the ask interface
+        const askContainer = document.createElement('div');
+        askContainer.className = 'replies-ask-container';
+        tabContent.appendChild(askContainer);
+        
+        // Create the ask chat interface in inline mode
+        this.createAskChatInterface({
+            messageElement: tempMessageElement,
+            messageId: messageId,
+            container: askContainer,
+            isInline: true,
+            title: '💬 Ask a question about this pinned message',
+            placeholder: 'What would you like to know about this message?',
+            showCloseButton: false,
+            showCancelButton: false,
+            onSubmit: async (question) => {
+                await this.processQuestion(tempMessageElement, messageId, question, true);
+                
+                // Refresh the replies tab to show the new conversation
+                setTimeout(() => {
+                    this.refreshRepliesTab(tabContent, messageId);
+                }, 1000);
+            }
+        });
+        
+        // Also load existing replies if any
+        this.loadExistingReplies(tabContent, messageId);
+    }
+
+    getCurrentDetailViewMessageId() {
+        // Try multiple ways to get the current message ID
+        
+        // 1. Check if there's a data attribute on the detail view
+        const detailView = document.getElementById('pinned-detail-view');
+        if (detailView && detailView.dataset.messageId) {
+            return detailView.dataset.messageId;
+        }
+        
+        // 2. Look for existing elements with message ID
+        const elementsWithMessageId = detailView.querySelectorAll('[data-message-id]');
+        if (elementsWithMessageId.length > 0) {
+            return elementsWithMessageId[0].dataset.messageId;
+        }
+        
+        // 3. Try to extract from URL or other sources
+        // This is a fallback - you might need to store the current message ID when showing the detail view
+        return null;
+    }
+
+    loadExistingReplies(tabContent, messageId) {
+        // Load existing conversation for this message
+        this.loadMessageConversation(messageId).then(conversation => {
+            if (conversation && conversation.length > 1) {
+                const repliesContainer = document.createElement('div');
+                repliesContainer.className = 'existing-replies-container';
+                repliesContainer.innerHTML = `
+                    <div class="replies-header">
+                        <h4>Previous Questions & Answers</h4>
+                    </div>
+                    <div class="replies-list">
+                        ${conversation.slice(1).map(reply => `
+                            <div class="reply-item">
+                                <div class="reply-question">
+                                    <strong>Q:</strong> ${reply.question}
+                                </div>
+                                <div class="reply-answer">
+                                    <strong>A:</strong> ${this.processMarkdown(reply.response || 'Loading...')}
+                                </div>
+                                <div class="reply-timestamp">
+                                    ${this.formatTimestamp(reply.timestamp)}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                tabContent.appendChild(repliesContainer);
+            }
+        });
+    }
+
+    refreshRepliesTab(tabContent, messageId) {
+        // Clear and reload the replies tab
+        const askContainer = tabContent.querySelector('.replies-ask-container');
+        const existingReplies = tabContent.querySelector('.existing-replies-container');
+        
+        // Remove existing replies and reload
+        if (existingReplies) {
+            existingReplies.remove();
+        }
+        
+        this.loadExistingReplies(tabContent, messageId);
+    }
+
     async processQuestion(messageElement, messageId, question, hasExistingConversation) {
         console.log('Processing question:', question, 'for message:', messageId);
         
@@ -1539,7 +2497,7 @@ class ChatGPTExtension {
             
             // Parse conversation context up to and including the target message
             console.log('Parsing conversation context...');
-            const conversationContext = this.parseConversationContext(messageElement);
+            const conversationContext = this.parseConversationContext(messageElement, messageId);
             console.log('Conversation context:', conversationContext.length, 'messages');
             
             // Detect current ChatGPT model
@@ -1970,10 +2928,139 @@ class ChatGPTExtension {
         return div.innerHTML;
     }
 
-    parseConversationContext(targetMessageElement = null) {
+    // Context Management Functions
+    saveConversationContext(messageId, context) {
+        try {
+            const contextData = {
+                messageId: messageId,
+                context: context,
+                timestamp: Date.now(),
+                url: window.location.href
+            };
+            
+            // Save to localStorage with a specific key pattern
+            const contextKey = `chatgpt_context_${messageId}`;
+            localStorage.setItem(contextKey, JSON.stringify(contextData));
+            
+            // Also maintain a list of all saved contexts for cleanup
+            const savedContexts = this.getSavedContextsList();
+            if (!savedContexts.includes(messageId)) {
+                savedContexts.push(messageId);
+                localStorage.setItem('chatgpt_saved_contexts', JSON.stringify(savedContexts));
+            }
+            
+            console.log(`Context saved for message ${messageId}:`, context.length, 'messages');
+            return true;
+        } catch (error) {
+            console.error('Error saving conversation context:', error);
+            return false;
+        }
+    }
+    
+    loadConversationContext(messageId) {
+        try {
+            const contextKey = `chatgpt_context_${messageId}`;
+            const contextData = localStorage.getItem(contextKey);
+            
+            if (contextData) {
+                const parsed = JSON.parse(contextData);
+                console.log(`Context loaded for message ${messageId}:`, parsed.context.length, 'messages');
+                return parsed.context;
+            }
+            
+            console.log(`No saved context found for message ${messageId}`);
+            return null;
+        } catch (error) {
+            console.error('Error loading conversation context:', error);
+            return null;
+        }
+    }
+    
+    getSavedContextsList() {
+        try {
+            const savedContexts = localStorage.getItem('chatgpt_saved_contexts');
+            return savedContexts ? JSON.parse(savedContexts) : [];
+        } catch (error) {
+            console.error('Error getting saved contexts list:', error);
+            return [];
+        }
+    }
+    
+    cleanupOldContexts() {
+        try {
+            const savedContexts = this.getSavedContextsList();
+            const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000); // 7 days
+            const contextsToKeep = [];
+            
+            savedContexts.forEach(messageId => {
+                const contextKey = `chatgpt_context_${messageId}`;
+                const contextData = localStorage.getItem(contextKey);
+                
+                if (contextData) {
+                    try {
+                        const parsed = JSON.parse(contextData);
+                        if (parsed.timestamp > oneWeekAgo) {
+                            contextsToKeep.push(messageId);
+                        } else {
+                            localStorage.removeItem(contextKey);
+                        }
+                    } catch (error) {
+                        // Remove invalid context data
+                        localStorage.removeItem(contextKey);
+                    }
+                }
+            });
+            
+            localStorage.setItem('chatgpt_saved_contexts', JSON.stringify(contextsToKeep));
+            console.log(`Context cleanup: kept ${contextsToKeep.length} of ${savedContexts.length} contexts`);
+        } catch (error) {
+            console.error('Error cleaning up old contexts:', error);
+        }
+    }
+    
+    getContextPreview(messageId, maxMessages = 5) {
+        const context = this.loadConversationContext(messageId);
+        if (!context || context.length === 0) {
+            return {
+                hasContext: false,
+                preview: [],
+                totalMessages: 0
+            };
+        }
+        
+        // Get the last few messages for preview
+        const previewMessages = context.slice(-maxMessages).map(msg => ({
+            role: msg.role,
+            content: msg.content.length > 100 ? 
+                msg.content.substring(0, 100) + '...' : 
+                msg.content,
+            fullLength: msg.content.length
+        }));
+        
+        return {
+            hasContext: true,
+            preview: previewMessages,
+            totalMessages: context.length,
+            isPartial: context.length > maxMessages
+        };
+    }
+
+    parseConversationContext(targetMessageElement = null, messageId = null) {
+        let context = null;
+        
+        // First, try to load saved context if messageId is provided
+        if (messageId) {
+            context = this.loadConversationContext(messageId);
+            if (context) {
+                console.log(`Using saved context for message ${messageId}`);
+                return context;
+            }
+        }
+        
+        // Parse fresh context
         if (targetMessageElement) {
             // Get conversation context up to and including the target message
-            return this.getMessagesUpToTarget(targetMessageElement);
+            context = this.getMessagesUpToTarget(targetMessageElement);
         } else {
             // Fallback: get all messages (current behavior)
             const messages = this.findMessageElements();
@@ -1991,8 +3078,15 @@ class ChatGPTExtension {
                 }
             });
             
-            return conversationMessages;
+            context = conversationMessages;
         }
+        
+        // Save the parsed context if messageId is provided
+        if (messageId && context) {
+            this.saveConversationContext(messageId, context);
+        }
+        
+        return context;
     }
 
     getMessagesUpToTarget(targetMessageElement) {
@@ -2567,3 +3661,6 @@ const chatGPTExtension = new ChatGPTExtension();
 
 // Make the extension instance globally available for pinned message interactions
 window.chatGPTExtension = chatGPTExtension;
+
+// Clean up old context data on initialization
+chatGPTExtension.cleanupOldContexts();

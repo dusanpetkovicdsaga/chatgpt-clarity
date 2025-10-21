@@ -1,8 +1,12 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT Clarity",
-  "version": "1.0",
-  "description": "Ask follow-up questions to any ChatGPT message in a side panel. Get deeper insights and continue conversations seamlessly without losing context.",
+  "short_name": "ChatGPT Clarity",
+  "version": "1.0.0",
+  "description": "Pin important ChatGPT messages, ask follow-up questions with full context, and organize conversations in a beautiful sidebar. Features masonry grid layout, full-screen mode, and seamless integration with ChatGPT interface.",
+  "author": "Dusan Petkovic",
+  "homepage_url": "https://github.com/dusanpetkovicdsaga/chatgpt-clarity",
+  "keywords": ["chatgpt", "productivity", "ai", "conversations", "organization", "questions", "sidebar", "pinning"],
   "permissions": [
     "storage",
     "activeTab",
@@ -26,7 +30,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "ChatGPT Clarity - Ask Follow-up Questions"
+    "default_title": "ChatGPT Clarity - Pin Messages, Ask Questions, Organize Conversations"
   },
   "web_accessible_resources": [
     {
