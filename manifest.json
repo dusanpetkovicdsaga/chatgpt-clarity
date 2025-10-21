@@ -6,17 +6,24 @@
   "description": "Pin important ChatGPT messages, ask follow-up questions with full context, and organize conversations in a beautiful sidebar. Features masonry grid layout, full-screen mode, and seamless integration with ChatGPT interface.",
   "author": "Dusan Petkovic",
   "homepage_url": "https://github.com/dusanpetkovicdsaga/chatgpt-clarity",
-  "keywords": ["chatgpt", "productivity", "ai", "conversations", "organization", "questions", "sidebar", "pinning"],
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting",
-    "tabs"
+  "privacy_policy": "https://github.com/dusanpetkovicdsaga/chatgpt-clarity/blob/main/PRIVACY.md",
+  "keywords": [
+    "chatgpt",
+    "productivity",
+    "ai",
+    "conversations",
+    "organization",
+    "questions",
+    "sidebar",
+    "pinning"
   ],
-  "host_permissions": [
-    "https://chatgpt.com/*",
-    "https://api.openai.com/*"
-  ],
+  "icons": {
+    "16": "icons/chatgpt-clarity-16.png",
+    "48": "icons/chatgpt-clarity-48.png",
+    "128": "icons/chatgpt-clarity-128.png"
+  },
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": ["https://chatgpt.com/*", "https://api.openai.com/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -30,7 +37,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "ChatGPT Clarity - Pin Messages, Ask Questions, Organize Conversations"
+    "default_title": "ChatGPT Clarity - Pin Messages, Ask Questions, Organize Conversations",
+    "default_icon": {
+      "16": "icons/chatgpt-clarity-16.png",
+      "48": "icons/chatgpt-clarity-48.png",
+      "128": "icons/chatgpt-clarity-128.png"
+    }
   },
   "web_accessible_resources": [
     {
